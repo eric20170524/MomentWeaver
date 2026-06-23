@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>圈影 MomentWeaver</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark">圈</span>
+        <div>
+          <strong>圈影</strong>
+          <span>MomentWeaver</span>
+        </div>
+      </div>
+      <div class="topbar-actions">
+        <button id="settingsBtn" type="button" class="ghost-button icon-button">设置</button>
+        <div class="status-pill" id="status">Ready</div>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <section class="panel input-panel">
+        <div class="section-title">
+          <h1>朋友圈素材</h1>
+          <button id="sampleCaptionBtn" type="button" class="ghost-button">示例文案</button>
+        </div>
+
+        <label class="field-label" for="caption">文案</label>
+        <textarea id="caption" rows="9" placeholder="朋友圈正文"></textarea>
+
+        <div class="field-grid">
+          <label>
+            <span class="field-label">风格</span>
+            <select id="tone">
+              <option value="documentary">纪实观点</option>
+              <option value="warm">温暖叙事</option>
+              <option value="cinematic">电影感</option>
+              <option value="sharp">锐利科技</option>
+              <option value="minimal">极简阅读</option>
+            </select>
+          </label>
+          <label>
+            <span class="field-label">时长</span>
+            <input id="duration" type="number" min="12" max="60" step="1" value="24" />
+          </label>
+        </div>
+
+        <label class="upload-zone" for="imageInput">
+          <input id="imageInput" type="file" accept="image/*" multiple />
+          <span class="upload-icon">＋</span>
+          <strong>添加图片</strong>
+          <small>JPG PNG WEBP</small>
+        </label>
+
+        <div class="example-strip" id="examples"></div>
+        <div class="thumb-grid" id="thumbGrid"></div>
+
+        <button id="analyzeBtn" class="primary-button" type="button">生成分镜</button>
+      </section>
+
+      <section class="phone-stage">
+        <div class="phone">
+          <div class="phone-top">
+            <span></span>
+            <strong>微视预览</strong>
+            <span></span>
+          </div>
+          <div class="reel-preview" id="reelPreview">
+            <div class="empty-preview">
+              <strong>预览</strong>
+              <span>00:00</span>
+            </div>
+          </div>
+          <div class="phone-controls">
+            <button id="prevShot" type="button" title="上一镜">‹</button>
+            <div id="shotDots" class="shot-dots"></div>
+            <button id="nextShot" type="button" title="下一镜">›</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel output-panel">
+        <div class="section-title">
+          <h2>短视频分镜</h2>
+          <span id="llmBadge" class="badge">未生成</span>
+        </div>
+
+        <div class="plan-summary" id="planSummary">
+          <strong>标题</strong>
+          <span>等待分镜</span>
+        </div>
+
+        <div class="shot-list" id="shotList"></div>
+
+        <div class="music-box">
+          <div class="section-title compact">
+            <h2>配乐</h2>
+            <div class="button-row">
+              <button id="musicAutoBtn" type="button" class="ghost-button">自动</button>
+              <button id="musicSearchBtn" type="button" class="ghost-button">搜索</button>
+            </div>
+          </div>
+          <input id="musicPrompt" type="text" placeholder="背景音乐提示词" />
+          <div id="musicCandidates" class="music-candidates"></div>
+          <div id="musicDownloadBox" class="music-download-box"></div>
+          <label class="check-row">
+            <input id="useSakMusic" type="checkbox" />
+            <span>导出前自动生成配乐</span>
+          </label>
+        </div>
+
+        <button id="renderBtn" class="primary-button export" type="button" disabled>导出 MP4</button>
+        <div id="resultBox" class="result-box"></div>
+
+        <div class="history-box">
+          <div class="section-title compact">
+            <h2>导出记录</h2>
+            <button id="refreshVideosBtn" type="button" class="ghost-button">刷新</button>
+          </div>
+          <div id="videoHistory" class="video-history"></div>
+          <div id="publishBox" class="publish-box hidden">
+            <video id="selectedVideoPlayer" controls playsinline></video>
+            <div class="selected-video-meta" id="selectedVideoMeta"></div>
+            <label>
+              <span class="field-label">短标题</span>
+              <input id="publishShortTitle" maxlength="20" placeholder="填写短标题有机会获得更多流量" />
+            </label>
+            <label>
+              <span class="field-label">视频描述</span>
+              <textarea id="publishDescription" rows="5" maxlength="480" placeholder="添加描述"></textarea>
+            </label>
+            <button id="publishWeishiBtn" type="button" class="primary-button publish-button">发布到微视</button>
+            <div id="publishResult" class="publish-result"></div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <div id="settingsModal" class="modal-backdrop hidden">
+      <section class="settings-modal">
+        <div class="section-title">
+          <h2>设置</h2>
+          <button id="settingsCloseBtn" type="button" class="ghost-button">关闭</button>
+        </div>
+        <div id="envPath" class="env-path"></div>
+        <form id="settingsForm" class="settings-form">
+          <label>
+            <span class="field-label">NEBULA_API_KEY</span>
+            <input data-setting="NEBULA_API_KEY" type="password" autocomplete="off" />
+          </label>
+          <div class="settings-grid">
+            <label>
+              <span class="field-label">NEBULA_PROVIDER</span>
+              <input data-setting="NEBULA_PROVIDER" />
+            </label>
+            <label>
+              <span class="field-label">NEBULA_MODEL</span>
+              <input data-setting="NEBULA_MODEL" />
+            </label>
+          </div>
+          <label>
+            <span class="field-label">NEBULA_BASE_URL</span>
+            <input data-setting="NEBULA_BASE_URL" />
+          </label>
+          <label>
+            <span class="field-label">NEBULA_SDK_PATH</span>
+            <input data-setting="NEBULA_SDK_PATH" />
+          </label>
+          <label>
+            <span class="field-label">SMART_ASSET_KIT_PATH</span>
+            <input data-setting="SMART_ASSET_KIT_PATH" />
+          </label>
+          <div class="settings-grid">
+            <label>
+              <span class="field-label">SAK_PYTHON</span>
+              <input data-setting="SAK_PYTHON" />
+            </label>
+            <label>
+              <span class="field-label">MOMENTWEAVER_PYTHON</span>
+              <input data-setting="MOMENTWEAVER_PYTHON" />
+            </label>
+          </div>
+          <div class="settings-grid">
+            <label>
+              <span class="field-label">MOMENTWEAVER_HOST</span>
+              <input data-setting="MOMENTWEAVER_HOST" />
+            </label>
+            <label>
+              <span class="field-label">MOMENTWEAVER_PORT</span>
+              <input data-setting="MOMENTWEAVER_PORT" />
+            </label>
+          </div>
+          <label>
+            <span class="field-label">MOMENTWEAVER_RELOAD</span>
+            <select data-setting="MOMENTWEAVER_RELOAD">
+              <option value="0">0</option>
+              <option value="1">1</option>
+            </select>
+          </label>
+          <button class="primary-button" type="submit">保存设置</button>
+          <div id="settingsMessage" class="settings-message"></div>
+        </form>
+      </section>
+    </div>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>
