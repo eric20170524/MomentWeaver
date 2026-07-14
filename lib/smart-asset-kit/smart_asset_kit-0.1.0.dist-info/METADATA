@@ -1,0 +1,25 @@
+Metadata-Version: 2.4
+Name: smart-asset-kit
+Version: 0.1.0
+Summary: A powerful CLI tool for generating game and media assets using multi-modal LLMs.
+Author: Lm
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+Requires-Dist: typer[all]>=0.9.0
+Requires-Dist: rich>=13.0.0
+Requires-Dist: opencv-python>=4.8.0
+Requires-Dist: Pillow>=10.0.0
+Requires-Dist: pydub>=0.25.1
+Requires-Dist: moviepy>=1.0.3
+Requires-Dist: numpy>=1.24.0
+Requires-Dist: PySide6>=6.5.0
+
+# Smart Asset Kit (SAK)
+
+A powerful CLI tool for generating game and media assets using multi-modal LLMs (Grok, Gemini, etc.).
+
+## Installation
+
+```bash
+pip install -e .
+```

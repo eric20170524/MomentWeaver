@@ -1,0 +1,256 @@
+Metadata-Version: 2.4
+Name: nebula_llm_sdk
+Version: 0.1.0
+Summary: A decoupled, multi-provider LLM SDK originally extracted from Nebula AI Workspace.
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+Requires-Dist: httpx>=0.24.0
+Requires-Dist: pydantic>=2.0.0
+Requires-Dist: google-genai>=0.1.0
+Requires-Dist: xai-sdk>=0.1.0
+Requires-Dist: Pillow>=10.0.0
+
+# Nebula LLM SDK
+
+这是一个轻量级、去耦合的多模型 LLM 适配层 SDK，支持文本、图像、视频、音频和音乐生成。它从 Nebula AI Workspace 中提取而来，旨在供其他项目方便地复用。
+
+## 特性
+
+* **多提供商支持**：内置了 OpenAI, Gemini, OpenRouter, Volcengine (Doubao), xAI (Grok), ElevenLabs 和 MiniMax 的支持。
+* **统一接口**：不论底层的模型参数差异，对上层提供统一的 `execute` 和 `execute_stream` 接口。
+* **0业务耦合**：不依赖具体的数据库模型配置，使用 `pydantic` 进行轻量化类型定义。
+* **可扩展性**：提供了类似 Hooks 的设计机制 (例如 `on_error`, `on_success`) 以方便业务层集成计量计费等功能。
+
+## 安装
+
+可以通过本地包的方式安装：
+
+```bash
+pip install -e ./nebula_llm_sdk
+```
+
+## 快速使用
+
+```python
+import asyncio
+from nebula_llm.factory import LLMFactory
+from nebula_llm.types import ModelInfo
+
+async def main():
+    # 1. 准备配置 (不再需要连接数据库)
+    model = ModelInfo(
+        target_model_id="gpt-4o",
+        provider="openai",
+        type="text"
+    )
+    
+    # 2. 获取对应的 Provider
+    provider = LLMFactory.get_provider(model)
+    
+    # 3. 执行
+    result = await provider.execute(
+        model_config=model,
+        api_key="sk-your-key...",
+        prompt="Hello, world!",
+        options={"temperature": 0.5}
+    )
+    
+    print(result.content)
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+## MiniMax 能力
+
+当 `ModelInfo.provider` 包含 `minimax` 时，`LLMFactory` 会返回 `MinimaxProvider`。该 Provider 支持 MiniMax OpenAI 兼容聊天接口，并额外接入了语音和音乐相关能力：
+
+* 文本对话：默认走 `https://api.minimaxi.com/v1/chat/completions`
+* 同步 TTS：`options.type="audio"`、`options.type="tts"`，或模型名以 `speech-` 开头
+* 异步 TTS：`options.type="async_tts"`
+* 音色克隆：`options.type="voice_clone"`
+* 歌词生成：`options.type="lyrics"` 或 `options.type="lyrics_generation"`
+* 音乐生成：`options.type="music"`，或模型名包含 `music`
+* 翻唱预处理：`options.type="music_cover_preprocess"`
+
+### MiniMax 文本对话
+
+```python
+model = ModelInfo(
+    target_model_id="abab6.5-chat",
+    provider="minimax",
+    type="text"
+)
+
+provider = LLMFactory.get_provider(model)
+result = await provider.execute(
+    model_config=model,
+    api_key="your-minimax-key",
+    prompt="用一句话介绍 MiniMax。"
+)
+
+print(result.content)
+```
+
+### MiniMax 同步 TTS
+
+同步 TTS 会返回 `ExecutionResult.assets`。默认 `output_format` 为 `hex`，SDK 会自动转成 `data:audio/...;base64,...`。
+
+```python
+model = ModelInfo(
+    target_model_id="speech-2.5-hd-preview",
+    provider="minimax",
+    type="audio"
+)
+
+result = await provider.execute(
+    model_config=model,
+    api_key="your-minimax-key",
+    prompt="你好，欢迎使用 Nebula LLM SDK。",
+    options={
+        "type": "audio",
+        "voice_id": "male-qn-qingse",
+        "speed": 1,
+        "vol": 1,
+        "pitch": 0,
+        "format": "mp3"
+    }
+)
+
+audio_data_uri = result.assets[0]
+```
+
+### MiniMax 异步 TTS
+
+异步 TTS 支持直接传文本，也支持通过 `file_path` / `file_bytes` 上传文本文件。默认会轮询任务并下载音频；如只想拿到任务 ID，可设置 `poll=False`。
+
+```python
+model = ModelInfo(
+    target_model_id="speech-2.8-hd",
+    provider="minimax",
+    type="audio"
+)
+
+result = await provider.execute(
+    model_config=model,
+    api_key="your-minimax-key",
+    prompt="这是一段较长文本，适合异步生成语音。",
+    options={
+        "type": "async_tts",
+        "voice_id": "audiobook_male_1",
+        "poll": True,
+        "poll_interval": 5,
+        "max_attempts": 60
+    }
+)
+
+task_id = result.content
+audio_data_uri = result.assets[0]
+```
+
+### MiniMax 音色克隆
+
+音色克隆需要传入 `clone_file` 或 `clone_file_path`，可以是本地路径、bytes 或类文件对象。返回的 `content` 是本次使用的 `voice_id`。
+
+```python
+result = await provider.execute(
+    model_config=ModelInfo(
+        target_model_id="speech-2.8-hd",
+        provider="minimax",
+        type="audio"
+    ),
+    api_key="your-minimax-key",
+    prompt="这是一段克隆音色的试听文本。",
+    options={
+        "type": "voice_clone",
+        "clone_file_path": "/path/to/reference.mp3",
+        "voice_id": "my_custom_voice"
+    }
+)
+
+voice_id = result.content
+demo_audio = result.assets[0] if result.assets else None
+```
+
+### MiniMax 歌词与音乐
+
+歌词生成返回 `content`，音乐生成返回 `assets` 中的音频 URL 或 data URI。
+
+```python
+lyrics_result = await provider.execute(
+    model_config=ModelInfo(
+        target_model_id="lyrics",
+        provider="minimax",
+        type="text"
+    ),
+    api_key="your-minimax-key",
+    prompt="写一首关于星空与远行的中文流行歌",
+    options={"type": "lyrics"}
+)
+
+music_result = await provider.execute(
+    model_config=ModelInfo(
+        target_model_id="music-2.6",
+        provider="minimax",
+        type="audio"
+    ),
+    api_key="your-minimax-key",
+    prompt="温暖、辽阔、带有电子氛围的流行编曲",
+    options={
+        "type": "music",
+        "lyrics": lyrics_result.content,
+        "output_format": "url"
+    }
+)
+
+music_url = music_result.assets[0]
+```
+
+### MiniMax 翻唱预处理
+
+翻唱预处理会返回 JSON 字符串，包含 `cover_feature_id`、`formatted_lyrics`、`structure_result` 和 `audio_duration`。其中 `cover_feature_id` 可继续传给音乐生成。
+
+```python
+cover_result = await provider.execute(
+    model_config=ModelInfo(
+        target_model_id="music-cover",
+        provider="minimax",
+        type="audio"
+    ),
+    api_key="your-minimax-key",
+    prompt="",
+    options={
+        "type": "music_cover_preprocess",
+        "audio_url": "https://example.com/source.mp3"
+    }
+)
+
+print(cover_result.content)
+```
+
+## 日志配置
+
+默认情况下，SDK 内部使用 `logging.getLogger("nebula_llm")`。你可以自行配置它，或者调用快速配置函数：
+
+```python
+from nebula_llm.logger import setup_default_logger
+setup_default_logger()
+```
+
+## 回调 (Hooks)
+如果在执行过程中需要像原应用那样监控 API 调用情况（例如更新 `KeyManager` 状态），你可以在 `options` 中传入回调函数：
+
+```python
+async def handle_error(api_key: str, error_msg: str):
+    print(f"API Failed: {error_msg}")
+
+await provider.execute(
+    model_config=model,
+    api_key="...",
+    prompt="...",
+    options={
+        "on_error": handle_error,
+        "on_success": lambda key: print("Success!")
+    }
+)
+```

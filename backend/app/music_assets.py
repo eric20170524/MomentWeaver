@@ -8,7 +8,14 @@ from pathlib import Path
 from typing import List, Tuple
 
 from .models import MusicCandidate, MusicSearchRequest, VideoPlan
-from .settings import get_smart_asset_kit_path
+from .settings import get_nebula_sdk_path, get_smart_asset_kit_path
+
+
+def _build_pythonpath(paths: List[Path], existing: str = "") -> str:
+    entries = [str(path) for path in paths]
+    if existing:
+        entries.append(existing)
+    return os.pathsep.join(entries)
 
 
 class MusicAssetService:
@@ -99,7 +106,10 @@ class MusicAssetService:
             cmd.append("--seamless")
 
         env = os.environ.copy()
-        env["PYTHONPATH"] = f"{self.kit_path}{os.pathsep}{env.get('PYTHONPATH', '')}"
+        env["PYTHONPATH"] = _build_pythonpath(
+            [self.kit_path, get_nebula_sdk_path()],
+            env.get("PYTHONPATH", ""),
+        )
 
         def run() -> subprocess.CompletedProcess[str]:
             return subprocess.run(

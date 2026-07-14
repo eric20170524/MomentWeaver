@@ -6,3 +6,9 @@ __pycache__/
 
 storage/jobs/*
 !storage/jobs/.gitkeep
+lib/**/.venv/
+lib/**/__pycache__/
+lib/**/*.pyc
+lib/**/.pytest_cache/
+lib/**/output/
+lib/smart-asset-kit/.sak_config.json

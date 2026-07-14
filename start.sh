@@ -2,6 +2,14 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Activate virtual environment if it exists
+if [ -d "$ROOT_DIR/.venv" ]; then
+  # shellcheck disable=SC1091
+  source "$ROOT_DIR/.venv/bin/activate"
+  export MOMENTWEAVER_PYTHON="${MOMENTWEAVER_PYTHON:-$ROOT_DIR/.venv/bin/python3}"
+fi
+
 PYTHON_BIN="${MOMENTWEAVER_PYTHON:-python3}"
 
 cd "$ROOT_DIR"

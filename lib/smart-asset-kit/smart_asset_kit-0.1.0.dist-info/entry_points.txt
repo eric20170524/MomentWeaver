@@ -1,0 +1,2 @@
+[console_scripts]
+sak = smart_asset_kit.cli.main:app

@@ -11,7 +11,7 @@ from urllib.parse import quote
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from PIL import Image
 
@@ -30,10 +30,14 @@ from .models import (
     SettingsSaveRequest,
     UploadedAsset,
     VideoRecord,
+    VisualRenderRequest,
+    VisualRenderResponse,
+    VisualRenderStatus,
 )
 from .music_assets import MusicAssetService
-from .settings import DOCS_EXAMPLES_DIR, FRONTEND_DIR, JOBS_DIR, ensure_storage, job_dir
+from .settings import DOCS_EXAMPLES_DIR, FRONTEND_DIR, JOBS_DIR, LEGACY_FRONTEND_DIR, ensure_storage, job_dir
 from .video_renderer import render_video
+from .visual_renderer import render_visual_project, visual_project_to_plan_dict
 
 
 app = FastAPI(title="MomentWeaver", version="0.1.0")
@@ -55,11 +59,22 @@ async def startup() -> None:
 
 
 app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
+if (FRONTEND_DIR / "assets").exists():
+    app.mount("/assets", StaticFiles(directory=str(FRONTEND_DIR / "assets")), name="assets")
+app.mount("/legacy-static", StaticFiles(directory=str(LEGACY_FRONTEND_DIR)), name="legacy-static")
 
 
 @app.get("/")
 async def index() -> FileResponse:
     return FileResponse(FRONTEND_DIR / "index.html")
+
+
+@app.get("/legacy")
+@app.get("/legacy/")
+async def legacy_index() -> HTMLResponse:
+    html = (LEGACY_FRONTEND_DIR / "index.html").read_text(encoding="utf-8")
+    html = html.replace('"/static/', '"/legacy-static/')
+    return HTMLResponse(html)
 
 
 @app.get("/api/health")
@@ -380,6 +395,32 @@ def _save_publish_state(job_path: Path, filename: str, state: Dict[str, str]) ->
     )
 
 
+def _render_status_path(job_path: Path) -> Path:
+    return job_path / "render_status.json"
+
+
+def _write_render_status(
+    job_path: Path,
+    *,
+    status: str,
+    project_path: Path,
+    video_path: Optional[Path] = None,
+    error: Optional[str] = None,
+) -> Dict[str, str]:
+    data = {
+        "job_id": job_path.name,
+        "status": status,
+        "project_path": str(project_path.resolve()),
+        "status_path": str(_render_status_path(job_path).resolve()),
+        "video_url": f"/api/jobs/{quote(job_path.name)}/video/{quote(video_path.name)}" if video_path else "",
+        "video_path": str(video_path.resolve()) if video_path else "",
+        "error": error or "",
+        "updated_at": datetime.now().isoformat(timespec="seconds"),
+    }
+    _render_status_path(job_path).write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    return data
+
+
 def _video_record(job_path: Path, video_path: Path) -> VideoRecord:
     job_id = job_path.name
     plan = _read_json(job_path / "plan.json")
@@ -520,6 +561,80 @@ async def render(request: RenderRequest) -> RenderResponse:
         video_path=str(video_path.resolve()),
         music_warning=music_warning,
     )
+
+
+@app.post("/api/visual-projects/render", response_model=VisualRenderResponse)
+async def render_visual_project_endpoint(request: VisualRenderRequest) -> VisualRenderResponse:
+    job_id = _safe_job_id(request.job_id) if request.job_id else f"visual_{uuid.uuid4().hex[:12]}"
+    job_path = job_dir(job_id)
+    job_path.mkdir(parents=True, exist_ok=True)
+    project_path = job_path / "visual_project.json"
+    publish_path = _publish_store_path(job_path)
+
+    project_path.write_text(
+        json.dumps(request.project.dict(), ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    _write_render_status(job_path, status="rendering", project_path=project_path)
+
+    try:
+        video_path = render_visual_project(
+            job_id=job_id,
+            project=request.project,
+            output_dir=job_path,
+        )
+    except Exception as exc:
+        status_data = _write_render_status(job_path, status="failed", project_path=project_path, error=str(exc))
+        raise HTTPException(status_code=500, detail=status_data) from exc
+
+    plan_data = visual_project_to_plan_dict(request.project)
+    (job_path / "plan.json").write_text(json.dumps(plan_data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    short_title = _clip_text(request.project.title, 20)
+    video_description = _clip_text(
+        request.project.weishi_caption or request.project.description or request.project.title,
+        480,
+    )
+    now = datetime.now().isoformat(timespec="seconds")
+    _save_publish_state(
+        job_path,
+        video_path.name,
+        {
+            "status": "ready",
+            "channel": "weishi",
+            "note": "由 video-background-board 可视编辑结果提交 MomentWeaver 后端渲染，已准备手动发布。",
+            "published_at": now,
+            "short_title": short_title,
+            "video_description": video_description,
+            "caption": video_description,
+        },
+    )
+
+    status_data = _write_render_status(job_path, status="rendered", project_path=project_path, video_path=video_path)
+    publish_text = (
+        f"短标题：{short_title}\n\n"
+        f"视频描述：\n{video_description}\n\n"
+        f"视频文件：{video_path.resolve()}"
+    ).strip()
+    return VisualRenderResponse(
+        **status_data,
+        publish_path=str(publish_path.resolve()),
+        publish_text=publish_text,
+        message="已完成后端 MP4 渲染并写入发布准备状态",
+    )
+
+
+@app.get("/api/visual-projects/{job_id}/status", response_model=VisualRenderStatus)
+async def get_visual_project_status(job_id: str) -> VisualRenderStatus:
+    safe_job_id = _safe_job_id(job_id)
+    job_path = job_dir(safe_job_id)
+    status_path = _render_status_path(job_path)
+    if not status_path.exists():
+        raise HTTPException(status_code=404, detail="Render status not found")
+    data = _read_json(status_path)
+    if data.get("error") == "":
+        data["error"] = None
+    return VisualRenderStatus(**data)
 
 
 @app.get("/api/videos")

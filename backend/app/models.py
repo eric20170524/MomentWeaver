@@ -138,3 +138,108 @@ class MusicPromptRequest(BaseModel):
     plan: VideoPlan
     caption: str = ""
     mood: str = "warm"
+
+
+class VisualBackgroundEmbellishment(BaseModel):
+    id: str
+    type: str = "mesh-blob"
+    color: str = "#3b82f6"
+    x: float = 50
+    y: float = 50
+    size: float = 240
+    blur: float = 80
+    opacity: float = Field(0.4, ge=0, le=1)
+
+
+class VisualBackgroundConfig(BaseModel):
+    type: Literal["solid", "gradient", "glassmorphism"] = "solid"
+    solidColor: str = "#0f172a"
+    gradientAngle: float = 135
+    gradientColors: List[str] = Field(default_factory=lambda: ["#0f172a", "#1e1b4b"])
+    glassBlur: float = 16
+    glassOpacity: float = Field(0.08, ge=0, le=1)
+    glassBorderOpacity: float = Field(0.15, ge=0, le=1)
+    showNoise: bool = False
+    showGrid: bool = False
+    gridColor: str = "rgba(255, 255, 255, 0.07)"
+    embellishments: List[VisualBackgroundEmbellishment] = Field(default_factory=list)
+
+
+class VisualCanvasSpec(BaseModel):
+    width: int = Field(1920, ge=320, le=3840)
+    height: int = Field(1080, ge=320, le=3840)
+    aspect_ratio: str = "16:9"
+
+
+class VisualAudioSegment(BaseModel):
+    id: str
+    startTime: float = Field(0, ge=0)
+    endTime: float = Field(1, ge=0)
+    text: str = ""
+    voiceId: Optional[str] = None
+
+
+class VisualCanvasElement(BaseModel):
+    id: str
+    type: Literal["text", "image", "decoration", "widget"]
+    textContent: Optional[str] = None
+    imageSrc: Optional[str] = None
+    imageName: Optional[str] = None
+    decorationType: Optional[str] = None
+    widgetType: Optional[str] = None
+    x: float = Field(50, ge=-100, le=200)
+    y: float = Field(50, ge=-100, le=200)
+    width: Optional[float] = Field(None, ge=1, le=3840)
+    height: Optional[float] = Field(None, ge=1, le=3840)
+    rotation: float = 0
+    scale: float = Field(1, ge=0.05, le=8)
+    zIndex: int = 0
+    color: Optional[str] = None
+    fontFamily: Optional[str] = None
+    fontSize: Optional[float] = Field(None, ge=6, le=280)
+    fontWeight: Optional[str] = None
+    fontStyle: Optional[Literal["normal", "italic"]] = "normal"
+    textAlign: Optional[Literal["left", "center", "right"]] = "center"
+    textShadow: Optional[str] = "none"
+    opacity: float = Field(1, ge=0, le=1)
+    startTime: float = Field(0, ge=0)
+    endTime: float = Field(1, ge=0)
+    fadeInDuration: float = Field(0, ge=0)
+    fadeOutDuration: float = Field(0, ge=0)
+    animationType: Literal["fade", "slide-up", "zoom", "rotate-in", "none"] = "fade"
+    voiceoverText: Optional[str] = None
+    audioSegments: List[VisualAudioSegment] = Field(default_factory=list)
+
+
+class VisualProject(BaseModel):
+    title: str = Field("可视编辑项目", min_length=1)
+    description: str = ""
+    weishi_caption: str = ""
+    hashtags: List[str] = Field(default_factory=lambda: ["可视编辑", "MomentWeaver"])
+    timelineDuration: float = Field(15.0, ge=1.0, le=300.0)
+    canvas: VisualCanvasSpec = Field(default_factory=VisualCanvasSpec)
+    background: VisualBackgroundConfig = Field(default_factory=VisualBackgroundConfig)
+    elements: List[VisualCanvasElement] = Field(default_factory=list)
+    source: str = "video-background-board"
+
+
+class VisualRenderRequest(BaseModel):
+    project: VisualProject
+    job_id: Optional[str] = None
+
+
+class VisualRenderStatus(BaseModel):
+    job_id: str
+    status: Literal["submitted", "rendering", "rendered", "failed"] = "submitted"
+    project_path: str = ""
+    status_path: str = ""
+    video_url: str = ""
+    video_path: str = ""
+    error: Optional[str] = None
+    updated_at: str = ""
+
+
+class VisualRenderResponse(VisualRenderStatus):
+    publish_path: str = ""
+    publish_text: str = ""
+    message: str = ""
