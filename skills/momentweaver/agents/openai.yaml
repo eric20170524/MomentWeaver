@@ -1,0 +1,4 @@
+interface:
+  display_name: "MomentWeaver 圈影"
+  short_description: "把朋友圈图文策划、渲染并验收为可发布的短视频与配套素材包"
+  default_prompt: "使用 $momentweaver 完成短视频策划、渲染与发布素材验收。"
